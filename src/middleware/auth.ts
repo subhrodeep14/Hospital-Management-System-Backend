@@ -34,7 +34,7 @@ export async function requireAuth(
     req.user = {
       id: user.id,
       role: user.role,
-      unitId: user.unitId ?? null,
+      unitId: user.unitId ? Number(user.unitId) : null,
       name: user.name,
       email: user.email,
     };

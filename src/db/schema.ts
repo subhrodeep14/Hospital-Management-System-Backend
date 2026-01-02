@@ -24,12 +24,11 @@ export const roleEnum = pgEnum("role_enum", ["admin", "employee"]);
 //   "closed",
 // ]);
 export const ticketStatusEnum = pgEnum("ticket_status_enum", [
-  "open",
-  "in_progress",
-  "pending",
-  "review_pending",   // <-- ADD THIS
-  "resolved",
-  "closed"
+  "Open",
+  "In Progress",
+  "Pending",   // <-- ADD THIS
+  "Resolved",
+  "Closed"
 ]);
 
 
@@ -48,6 +47,7 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 120 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   role: roleEnum("role").notNull().default("employee"),
+  phoneNumber: varchar("phone_number", { length: 20 }),
   // For employees, which unit they belong to
   unitId: integer("unit_id").references(() => units.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -110,9 +110,12 @@ export const tickets = pgTable("tickets", {
   department: varchar("department", { length: 255 }).notNull(),
      // name from frontend
 
+  floor: varchar("floor", { length: 10 }),
+  room: varchar("room", { length: 20 }),
+  bed: varchar("bed", { length: 20 }),
   status: ticketStatusEnum("status")
-    .notNull()
-    .default("pending"),
+        .notNull()
+        .default("Pending"),
 
   unitId: integer("unit_id").references(() => units.id).notNull(),
   equipmentId: integer("equipment_id"),

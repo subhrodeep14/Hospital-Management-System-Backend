@@ -7,6 +7,7 @@ import {
   findUserByEmail,
   hashPassword,
   signToken,
+  isValidAdminCode,
 } from "../lib/auth";
 import { requireAuth } from "../middleware/auth";
 
@@ -50,11 +51,22 @@ authRouter.post("/seed", async (req, res) => {
 // REGISTER NEW USER (ADMIN ONLY)
 authRouter.post("/register", async (req, res) => {
   try {
-    const { name, email, password, role, unitId } = req.body;
+    const { name, email, password, phone, unitId, adminCode } = req.body;
 
     // Validate
-    if (!name || !email || !password || !role) {
+    if (!name || !email || !password || !phone) {
       return res.status(400).json({ message: "Missing required fields" });
+    }
+    type UserRole = "admin" | "employee";
+
+    let role: UserRole = "employee";
+    
+    if (adminCode) {
+      const isAdmin = await isValidAdminCode(adminCode);
+      if (!isAdmin) {
+        return res.status(401).json({ message: "Invalid admin code" });
+      }
+      role = "admin";
     }
 
     // Validate role
@@ -86,6 +98,7 @@ authRouter.post("/register", async (req, res) => {
         name,
         email,
         passwordHash,
+        phoneNumber: phone,
         role,
         unitId: role === "employee" ? unitId : null,
       })
@@ -101,6 +114,7 @@ authRouter.post("/register", async (req, res) => {
         email: createdUser.email,
         role: createdUser.role,
         unitId: createdUser.unitId,
+        phoneNumber: createdUser.phoneNumber,
       },
     });
   } catch (error) {

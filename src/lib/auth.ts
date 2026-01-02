@@ -39,3 +39,19 @@ export async function findUserByEmail(email: string) {
   const result = await db.select().from(users).where(eq(users.email, email));
   return result[0] || null;
 }
+
+//const adminCodes = process.env.ADMIN_CODES.split(",");
+const adminCodes = (process.env.ADMIN_CODES ?? "").split(",");
+
+// hash all admin codes once
+const hashedAdminCodes = adminCodes.map(code =>
+  bcrypt.hashSync(code, 10)
+);
+
+export const isValidAdminCode = async (inputCode: string) => {
+  for (const hashed of hashedAdminCodes) {
+    const match = await bcrypt.compare(inputCode, hashed);
+    if (match) return true;
+  }
+  return false;
+};

@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { requireAuth, requireAdmin } from "../middleware/auth";
 import { db, tickets, units, users } from "../db";
-import { eq, and,sql } from "drizzle-orm";
+import { eq, and,sql,desc } from "drizzle-orm";
 
 export const ticketRouter = Router();
 
@@ -17,10 +17,10 @@ ticketRouter.post("/", requireAuth, async (req, res) => {
       description,
       priority,
       category,
-      
+      Floor,
+      Room,
+      Bed,
       department,
-      equipmentId,
-      assignedTo,
       unitId,
     } = req.body;
 
@@ -49,27 +49,7 @@ ticketRouter.post("/", requireAuth, async (req, res) => {
 
       finalUnitId = Number(unitId);
     }
-    let assignedToId: number | null = null;
-    let assignedToName: string | null = null;
     
-  
-
-    if (assignedTo && assignedTo.trim() !== "") {
-      const foundUser = await db
-        .select()
-        .from(users)
-        .where(eq(users.name, assignedTo));
-
-      if (foundUser.length > 0) {
-        assignedToId = foundUser[0].id; // ALWAYS VALID NUMBER
-        assignedToName = null;
-      } else {
-        assignedToId = null;             // NEVER NaN
-        assignedToName = assignedTo;     // Store as string
-      }
-    }
-    
-    // Fix priority mapping
     const normalizedPriority = priority?.toLowerCase();
     const finalPriority =
       normalizedPriority === "critical" ? "high" : normalizedPriority || "medium";
@@ -82,21 +62,20 @@ ticketRouter.post("/", requireAuth, async (req, res) => {
         description,
         category,
         priority: finalPriority,
-
-        // NEW fields stored directly
-      
         department,
-        
-
         // system-controlled
-        status: "pending",
+        
+        floor: Floor || null,
+        room: Room || null,
+        bed: Bed || null,
+        status: "Pending",
 
         unitId: finalUnitId,
-        equipmentId: equipmentId ? Number(equipmentId) : null,
+        equipmentId:  null,
 
         createdById: user.id,
-        assignedToName,
-        assignedToId,
+        assignedToName: null,
+        assignedToId: null,
       })
       .returning();
 
@@ -109,129 +88,6 @@ ticketRouter.post("/", requireAuth, async (req, res) => {
 });
 
 
-// Dashboard counts for logged-in user
-// ticketRouter.get("/count", requireAuth, async (req, res) => {
-//   const user = req.user!;
-
-//   try {
-//     // For simplicity: total & pending counts
-//     if (user.role === "admin") {
-//       const total = await db
-//         .select({ count: tickets.id })
-//         .from(tickets);
-//       const pending = await db
-//         .select({ count: tickets.id })
-//         .from(tickets)
-//         .where(eq(tickets.status, "pending"));
-
-//       return res.json({
-//         total: Number(total[0]?.count ?? 0),
-//         pending: Number(pending[0]?.count ?? 0),
-//       });
-//     } else {
-//       // Employee: show tickets of their unit
-//       if (!user.unitId) {
-//         return res.json({ total: 0, pending: 0 });
-//       }
-
-//       const total = await db
-//         .select({ count: tickets.id })
-//         .from(tickets)
-//         .where(eq(tickets.unitId, user.unitId));
-
-//       const pending = await db
-//         .select({ count: tickets.id })
-//         .from(tickets)
-//         .where(
-//           and(
-//             eq(tickets.unitId, user.unitId),
-//             eq(tickets.status, "pending")
-//           )
-//         );
-
-//       return res.json({
-//         total: Number(total[0]?.count ?? 0),
-//         pending: Number(pending[0]?.count ?? 0),
-//       });
-//     }
-//   } catch (e) {
-//     console.error(e);
-//     return res.status(500).json({ message: "Server error" });
-//   }
-// });
-
-// // Pending tickets list (REVIEW PAGE) – admin only
-// ticketRouter.get("/pending", requireAuth, requireAdmin, async (req, res) => {
-//   try {
-//     const rows = await db
-//       .select({
-//         id: tickets.id,
-//         title: tickets.title,
-//         description: tickets.description,
-//         status: tickets.status,
-//         priority: tickets.priority,
-//         createdAt: tickets.createdAt,
-//         unitId: tickets.unitId,
-//       })
-//       .from(tickets)
-//       .where(eq(tickets.status, "pending"));
-
-//     return res.json({ tickets: rows });
-//   } catch (e) {
-//     console.error(e);
-//     return res.status(500).json({ message: "Server error" });
-//   }
-// });
-
-// // Update ticket status (review action) – admin only
-// ticketRouter.patch(
-//   "/:id/status",
-//   requireAuth,
-//   requireAdmin,
-//   async (req, res) => {
-//     try {
-//       const ticketId = Number(req.params.id);
-//       const { status, assignedToId } = req.body as {
-//         status: "pending" | "in_progress" | "resolved" | "closed";
-//         assignedToId?: number;
-//       };
-
-//       if (!status) {
-//         return res.status(400).json({ message: "Status is required" });
-//       }
-
-//       // Optional: validate assignedToId exists
-//       if (assignedToId) {
-//         const userResult = await db
-//           .select()
-//           .from(users)
-//           .where(eq(users.id, assignedToId));
-//         if (!userResult[0]) {
-//           return res.status(400).json({ message: "Assigned user not found" });
-//         }
-//       }
-
-//       const updated = await db
-//         .update(tickets)
-//         .set({
-//           status,
-//           assignedToId: assignedToId ?? null,
-//           updatedAt: new Date(),
-//         })
-//         .where(eq(tickets.id, ticketId))
-//         .returning();
-
-//       if (!updated[0]) {
-//         return res.status(404).json({ message: "Ticket not found" });
-//       }
-
-//       return res.json({ ticket: updated[0] });
-//     } catch (e) {
-//       console.error(e);
-//       return res.status(500).json({ message: "Server error" });
-//     }
-//   }
-// );
 
 
 /* ------------------ DASHBOARD COUNTS ------------------ */
@@ -300,21 +156,56 @@ ticketRouter.get("/count", requireAuth, async (req, res) => {
 });
 
 /* ------------------ GET ALL TICKETS ------------------ */
+
 ticketRouter.get("/", requireAuth, async (req, res) => {
   try {
     const user = req.user!;
-
+    const { unitId } = req.query;
     let rows;
 
     if (user.role === "admin") {
-      rows = await db.select().from(tickets);
+      rows = await db
+        .select({
+          id: tickets.id,
+          title: tickets.title,
+          description: tickets.description,
+          category: tickets.category,
+          priority: tickets.priority,
+          status: tickets.status,
+          department: tickets.department,
+          unitId: tickets.unitId,
+          createdAt: tickets.createdAt,
+
+          // 👇 THIS IS THE KEY
+          createdBy: users.name,
+          assignedTo: tickets.assignedToName,
+        })
+        .from(tickets)
+        .leftJoin(users, eq(tickets.createdById, users.id))
+        .where(eq(tickets.unitId, Number(unitId)))
+        .orderBy(desc(tickets.createdAt));
     } else {
       if (!user.unitId) return res.json({ tickets: [] });
 
       rows = await db
-        .select()
+        .select({
+          id: tickets.id,
+          title: tickets.title,
+          description: tickets.description,
+          category: tickets.category,
+          priority: tickets.priority,
+          status: tickets.status,
+          department: tickets.department,
+          unitId: tickets.unitId,
+          createdAt: tickets.createdAt,
+
+          createdBy: users.name,
+          assignedTo: tickets.assignedToName,
+        })
         .from(tickets)
-        .where(eq(tickets.unitId, user.unitId));
+        .leftJoin(users, eq(tickets.createdById, users.id))
+        .where(eq(tickets.unitId, user.unitId))
+        .orderBy(desc(tickets.createdAt));
     }
 
     return res.json({ tickets: rows });
@@ -330,7 +221,7 @@ ticketRouter.get("/pending", requireAuth, requireAdmin, async (req, res) => {
     const rows = await db
       .select()
       .from(tickets)
-      .where(eq(tickets.status, "pending"));
+      .where(eq(tickets.status, "Pending"));
 
     return res.json({ tickets: rows });
   } catch (e) {
@@ -338,3 +229,181 @@ ticketRouter.get("/pending", requireAuth, requireAdmin, async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 });
+
+// ------------------ UPDATE TICKET ------------------
+// ticketRouter.patch("/:id", requireAuth, async (req, res) => {
+//   try {
+//     const ticketId = Number(req.params.id);
+//     const user = req.user!;
+
+//     const {
+//       status,
+//       priority,
+//       category,
+//       assignedTo,
+//     } = req.body as {
+//       status?: string;
+//       priority?: string;
+//       category?: string;
+//       assignedTo?: string | null;
+//     };
+
+//     // 🔒 Fetch ticket
+//     const existing = await db
+//       .select()
+//       .from(tickets)
+//       .where(eq(tickets.id, ticketId));
+
+//     if (!existing[0]) {
+//       return res.status(404).json({ message: "Ticket not found" });
+//     }
+
+//     const ticket = existing[0];
+
+//     // 🔐 UNIT ACCESS CHECK
+//     if (user.role !== "admin" && user.unitId !== ticket.unitId) {
+//       return res.status(403).json({ message: "Unauthorized" });
+//     }
+
+//     let assignedToId: number | null = null;
+//     let assignedToName: string | null = null;
+
+//     if (assignedTo && assignedTo.trim() !== "") {
+//       const foundUser = await db
+//         .select()
+//         .from(users)
+//         .where(eq(users.name, assignedTo));
+
+//       if (foundUser[0]) {
+//         assignedToId = foundUser[0].id;
+//         assignedToName = null;
+//       } else {
+//         assignedToName = assignedTo;
+//       }
+//     }
+
+//     const updated = await db
+//       .update(tickets)
+//       .set({
+//         status: status ?? ticket.status,
+//         priority: priority ?? ticket.priority,
+//         category: category ?? ticket.category,
+//         assignedToId,
+//         assignedToName,
+//         updatedAt: new Date(),
+//       })
+//       .where(eq(tickets.id, ticketId))
+//       .returning();
+
+//     return res.json({ ticket: updated[0] });
+
+//   } catch (e) {
+//     console.error("UPDATE TICKET ERROR:", e);
+//     return res.status(500).json({ message: "Server error" });
+//   }
+// });
+ticketRouter.patch("/:id", requireAuth, async (req, res) => {
+  try {
+    const ticketId = Number(req.params.id);
+    const user = req.user!;
+
+    const { status, priority, category, assignedTo } = req.body;
+
+    const existing = await db
+      .select()
+      .from(tickets)
+      .where(eq(tickets.id, ticketId));
+
+    if (!existing[0]) {
+      return res.status(404).json({ message: "Ticket not found" });
+    }
+
+    const ticket = existing[0];
+
+    if (user.role !== "admin" && user.unitId !== ticket.unitId) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    // ✅ SAFE STATUS CAST
+    const VALID_STATUSES = [
+      "Open",
+      "In Progress",
+      "Pending",
+      "Resolved",
+      "Closed",
+    ] as const;
+
+    type TicketStatus = (typeof VALID_STATUSES)[number];
+
+    const safeStatus: TicketStatus | undefined =
+      status && VALID_STATUSES.includes(status as TicketStatus)
+        ? (status as TicketStatus)
+        : undefined;
+
+    let assignedToId: number | null = null;
+    let assignedToName: string | null = null;
+
+    if (assignedTo && assignedTo.trim() !== "") {
+      const foundUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.name, assignedTo));
+
+      if (foundUser[0]) {
+        assignedToId = foundUser[0].id;
+      } else {
+        assignedToName = assignedTo;
+      }
+    }
+
+    const updated = await db
+      .update(tickets)
+      .set({
+        status: safeStatus ?? ticket.status,
+        priority: priority ?? ticket.priority,
+        category: category ?? ticket.category,
+        assignedToId,
+        assignedToName,
+        updatedAt: new Date(),
+      })
+      .where(eq(tickets.id, ticketId))
+      .returning();
+
+    return res.json({ ticket: updated[0] });
+  } catch (e) {
+    console.error("UPDATE ERROR:", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+ticketRouter.patch(
+  "/:id/status",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const ticketId = Number(req.params.id);
+      const { status } = req.body;
+
+      if (!status) {
+        return res.status(400).json({ message: "Status is required" });
+      }
+
+      const [updated] = await db
+        .update(tickets)
+        .set({
+          status,
+          updatedAt: new Date(),
+        })
+        .where(eq(tickets.id, ticketId))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
+
+      return res.json({ ticket: updated });
+    } catch (e) {
+      console.error("STATUS UPDATE ERROR:", e);
+      return res.status(500).json({ message: "Server error" });
+    }
+  }
+);

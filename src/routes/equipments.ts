@@ -176,30 +176,43 @@ equipmentRouter.get("/stats", requireAuth, async (req, res) => {
   }
 
   
-  const result = await db.execute(sql`
-  SELECT
-    COUNT(*)::int AS total,
-    COUNT(*) FILTER (WHERE status = 'Active')::int AS active,
-    COUNT(*) FILTER (WHERE status = 'Maintenance')::int AS maintenance,
-    COUNT(*) FILTER (WHERE status = 'Out of Order')::int AS out_of_order,
-    COALESCE(SUM(cost),0)::int AS total_value
-  FROM equipments
-  WHERE unit_id = ${unitId}
-`);
+//   const result = await db.execute(sql`
+//   SELECT
+//     COUNT(*)::int AS total,
+//     COUNT(*) FILTER (WHERE status = 'Active')::int AS active,
+//     COUNT(*) FILTER (WHERE status = 'Maintenance')::int AS maintenance,
+//     COUNT(*) FILTER (WHERE status = 'Out of Order')::int AS out_of_order,
+//     COALESCE(SUM(cost),0)::int AS total_value
+//   FROM equipments
+//   WHERE unit_id = ${unitId}
+// `);
 
-const stats = result.rows[0] as {
-  total: number;
-  active: number;
-  maintenance: number;
-  out_of_order: number;
-  total_value: number;
-};
+// const stats = result.rows[0] as {
+//   total: number;
+//   active: number;
+//   maintenance: number;
+//   out_of_order: number;
+//   total_value: number;
+// };
 
-  res.json({
-    total: stats.total,
-    active: stats.active,
-    maintenance: stats.maintenance,
-    outOfOrder: stats.out_of_order,
-    totalValue: stats.total_value,
-  });
+//   res.json({
+//     total: stats.total,
+//     active: stats.active,
+//     maintenance: stats.maintenance,
+//     outOfOrder: stats.out_of_order,
+//     totalValue: stats.total_value,
+//   });
+const rows = await db
+    .select()
+    .from(equipments)
+    .where(eq(equipments.unitId, unitId));
+
+  const stats = {
+    total: rows.length,
+    active: rows.filter(e => e.status === "Active").length,
+    maintenance: rows.filter(e => e.status === "Maintenance").length,
+    outOfOrder: rows.filter(e => e.status === "Out of Order").length,
+  };
+
+  res.json(stats);
 });

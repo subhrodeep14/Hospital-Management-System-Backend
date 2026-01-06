@@ -18,14 +18,16 @@ const app = express();
 
 app.use(
   cors({
-    origin: ["http://localhost:5173",
-    "https://hospital-mangement-system-mu.vercel.app/",],
-     // your React URL
+   origin: "https://hospital-mangement-system-mu.vercel.app",
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 app.use(cookieParser());
 app.use(express.json());
+app.options("*", cors());
+
 
 app.use("/api/auth", authRouter);
 app.use("/api/tickets", ticketRouter);
